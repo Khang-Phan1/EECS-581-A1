@@ -1,7 +1,25 @@
+/*
+Prologue Comment
+File: ipv4_address_extractor.cpp
+Description: Takes a user's string input and extracts an ipv4 address
+             from it. Displays the dotted decimal and 32-bit forms
+             along with a port if the string contains one.
+Inputs:  A user string
+Outputs: The dotted decimal and 32-bit ipv4 address and port if
+         applicable. Otherwise, lets user know that there is no
+         valid address.
+External sources: Original user input handler and display, with
+                  assistance by ChatGPT for parsing and extraction
+                  logic.
+Author: Khang Phan
+Created: [sept 22 2026]
+*/
+
 #include <iostream>
 #include <string>
 using namespace std;
 
+// Helper function to convert the 32-bit IP address to dotted decimal.
 string convertBinaryToDotted(const unsigned long outAddress) {
     string a = to_string((outAddress >> 24) & 0xFF);
     string b = to_string((outAddress >> 16) & 0xFF);
@@ -18,51 +36,38 @@ string convertBinaryToDotted(const unsigned long outAddress) {
 //   - have a value <= maxValue
 //
 // On success, pos is advanced past the number.
-static bool parseNumber(const std::string& str,
-                        size_t& pos,
-                        int maxDigits,
-                        int maxValue,
-                        int& value)
-{
+static bool parseNumber(const std::string& str, size_t& pos, int maxDigits, int maxValue, int& value) {
     size_t start = pos;
 
-    // Must have at least one digit.
-    if (pos >= str.length() ||
-        str[pos] < '0' || str[pos] > '9')
-    {
+    // Checks that the first character is a digit.
+    if (pos >= str.length() || str[pos] < '0' || str[pos] > '9') {
         return false;
     }
 
-    // Count digits.
+    // Count # of digits.
     int digitCount = 0;
-    while (pos < str.length() &&
-           str[pos] >= '0' && str[pos] <= '9')
-    {
+    while (pos < str.length() && str[pos] >= '0' && str[pos] <= '9') {
         ++digitCount;
         ++pos;
 
-        if (digitCount > maxDigits)
-        {
+        if (digitCount > maxDigits) {
             return false;
         }
     }
 
     // No leading zero unless the number is exactly "0".
-    if (digitCount > 1 && str[start] == '0')
-    {
+    if (digitCount > 1 && str[start] == '0') {
         return false;
     }
 
-    // Convert manually; no string-to-number functions.
+    // Convert string to integer type.
     value = 0;
 
-    for (size_t i = start; i < pos; ++i)
-    {
+    for (size_t i = start; i < pos; ++i) {
         int digit = str[i] - '0';
 
         // Check for overflow against maxValue before multiplying.
-        if (value > (maxValue - digit) / 10)
-        {
+        if (value > (maxValue - digit) / 10) {
             return false;
         }
 
@@ -79,68 +84,45 @@ static bool parseNumber(const std::string& str,
 // On failure:
 //   outAddress is set to 0.
 //   outPort is set to -1.
-bool extractIPv4(const std::string& str,
-                 unsigned long& outAddress,
-                 int& outPort)
-{
+bool extractIPv4(const std::string& str, unsigned long& outAddress, int& outPort) {
     // Required failure values.
     outAddress = 0;
     outPort = -1;
 
     size_t i = 0;
 
-    while (i < str.length())
-    {
+    while (i < str.length()) {
         // Skip garbage characters.
-        //
         // A candidate token consists only of:
-        //   digits, '.', ':'
-        if (!((str[i] >= '0' && str[i] <= '9') ||
-              str[i] == '.' ||
-              str[i] == ':'))
-        {
+        // digits, '.', ':'
+        if (!((str[i] >= '0' && str[i] <= '9') || str[i] == '.' || str[i] == ':')) {
             ++i;
             continue;
         }
 
-        // Find the end of this entire candidate token.
-        //
-        // We validate the whole run later. This is important because
-        // we must NOT extract a valid IPv4 address from inside an
-        // otherwise-invalid token.
-        size_t tokenStart = i;
+        // Current position in string being parsed
+        size_t pos = i;
 
-        while (i < str.length() &&
-               ((str[i] >= '0' && str[i] <= '9') ||
-                str[i] == '.' ||
-                str[i] == ':'))
-        {
+        // End position of the entire candidate token.
+        while (i < str.length() && ((str[i] >= '0' && str[i] <= '9') || str[i] == '.' || str[i] == ':')) {
             ++i;
         }
-
         size_t tokenEnd = i;
-
-        // Parse exactly the candidate token.
-        size_t pos = tokenStart;
 
         int octets[4];
 
         bool valid = true;
 
         // Parse the four IPv4 octets.
-        for (int octet = 0; octet < 4; ++octet)
-        {
-            if (!parseNumber(str, pos, 3, 255, octets[octet]))
-            {
+        for (int octet = 0; octet < 4; ++octet) {
+            if (!parseNumber(str, pos, 3, 255, octets[octet])) {
                 valid = false;
                 break;
             }
 
             // First three octets must be followed by '.'.
-            if (octet < 3)
-            {
-                if (pos >= tokenEnd || str[pos] != '.')
-                {
+            if (octet < 3) {
+                if (pos >= tokenEnd || str[pos] != '.') {
                     valid = false;
                     break;
                 }
@@ -152,46 +134,31 @@ bool extractIPv4(const std::string& str,
         // After the fourth octet, there may be an optional port.
         int port = -1;
 
-        if (valid && pos < tokenEnd)
-        {
+        if (valid && pos < tokenEnd) {
             // The only valid thing after the fourth octet is ":port".
-            if (str[pos] != ':')
-            {
+            if (str[pos] != ':') {
                 valid = false;
             }
-            else
-            {
+            else {
                 ++pos;
 
-                if (!parseNumber(str, pos, 5, 65535, port))
-                {
+                if (!parseNumber(str, pos, 5, 65535, port)) {
                     valid = false;
                 }
             }
         }
 
         // The entire candidate token must have been consumed.
-        //
-        // This prevents accepting things such as:
-        //   192.168.1.1.999
-        //   192.168.1.1:80:90
-        //   192.168.1.1:99999
-        if (pos != tokenEnd)
-        {
+        // This prevents accepting things such as 192.168.1.1:80:90.
+        if (pos != tokenEnd) {
             valid = false;
         }
 
-        if (!valid)
-        {
+        if (!valid) {
             continue;
         }
 
-        // Construct the 32-bit IPv4 value manually.
-        //
-        // Example:
-        // 192.168.1.10
-        // becomes
-        // 0xC0A8010A
+        // Construct the 32-bit IPv4 value
         outAddress =
             (static_cast<unsigned long>(octets[0]) << 24) |
             (static_cast<unsigned long>(octets[1]) << 16) |
@@ -210,9 +177,10 @@ int main() {
     string userString;
     unsigned long outAddress;
     int outPort;
-    bool isValidAddress;
 
     while (true) {
+        // Ask for user string, breaks loop
+        // and ends program if 'END'
         cout << "\nEnter a string (or \'END\' to quit): ";
         getline(cin, userString);
         if (userString == "END") {
@@ -220,12 +188,13 @@ int main() {
             break;
         } 
 
-        isValidAddress = extractIPv4(userString, outAddress, outPort);
-        if (isValidAddress) {
+        // Check for valid address in string, extracts it
+        if (extractIPv4(userString, outAddress, outPort)) {
             string address = to_string(outAddress);
             string port = (outPort != -1) ? to_string(outPort) : "none";
             string dottedAddr = convertBinaryToDotted(outAddress);
-            cout << "Extracted IPv4 Address: " + dottedAddr + " (decimal value: " + address + ", port: " + port + ")\n";
+
+            cout << "Extracted IPv4 address: " + dottedAddr + " (decimal value: " + address + ", port: " + port + ")\n";
         }
         else {
             cout << "Invalid input: no valid IPv4 address found.\n";
